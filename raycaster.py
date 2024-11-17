@@ -9,7 +9,7 @@ rng = np.random.default_rng(255)
 
 class Game:
 
-    def __init__(self, window_width=700, window_height=700, canvas_width=200, canvas_height=200):
+    def __init__(self, window_width=700, window_height=700, canvas_width=150, canvas_height=150):
 
         # initialize pygame
         pygame.init()
@@ -39,16 +39,21 @@ class Game:
         # field of view
         self.lambda_max = 1.0
 
-        # grid
+        # construct grid
         self.m = 25
         self.n = 25
         self.grid = [[0 for j in range(self.n)] for i in range(self.m)]
 
+        # fill with random scene
         for i in range(self.m):
             for j in range(self.n):
                 u = rng.uniform()
-                if u < 0.1:
+                if u < 0.033:
                     self.grid[i][j] = 1
+                elif u < 0.066:
+                    self.grid[i][j] = 2
+                elif u < 0.1:
+                    self.grid[i][j] = 3
 
         # running flag
         self.running = True
@@ -56,24 +61,11 @@ class Game:
     def framerate_counter(self):
         """Calculate and display frames per second."""
         # get fps
-        fps = str(int(self.clock.get_fps()))
-        pos = f"pos: {self.camera_position[0]}, {self.camera_position[1]}"
-        ang = f"ang: {self.camera_angle}"
-        cam = f"cam: {self.camera_direction[0]}, {self.camera_direction[1]}"
-        pln = f"pln: {self.plane_direction[0]}, {self.plane_direction[1]}"
+        fps = f"fps: {int(self.clock.get_fps())}"
         # create text
         fps_t = self.font.render(fps , 1, (0, 255, 0))
-        pos_t = self.font.render(pos, 1, (0, 255, 0)) 
-        ang_t = self.font.render(ang, 1, (0, 255, 0))
-        cam_t = self.font.render(cam, 1, (0, 255, 0))
-        pln_t = self.font.render(pln, 1, (0, 255, 0))
         # display on canvas
-        self.window.blit(fps_t,(0, 18 * 0))
-        self.window.blit(pos_t,(0, 18 * 1))
-        self.window.blit(ang_t,(0, 18 * 2))
-        self.window.blit(cam_t,(0, 18 * 3))
-        self.window.blit(pln_t,(0, 18 * 4))
-
+        self.window.blit(fps_t,(0, 0))
     
     def input(self):
         '''Take inputs'''
@@ -114,8 +106,8 @@ class Game:
             self.camera_angle -= turn
 
         # update camera and plane direction
-        self.camera_direction = [np.sin(self.camera_angle), np.cos(self.camera_angle)] #[-np.sin(self.camera_angle), np.cos(self.camera_angle)]
-        self.plane_direction = [-np.cos(self.camera_angle), np.sin(self.camera_angle)] #[np.cos(self.camera_angle), np.sin(self.camera_angle)]
+        self.camera_direction = [np.sin(self.camera_angle), np.cos(self.camera_angle)]
+        self.plane_direction = [-np.cos(self.camera_angle), np.sin(self.camera_angle)]
 
     def render(self):
 
@@ -130,28 +122,35 @@ class Game:
             ray_direction_x = self.camera_direction[0] + lam * self.plane_direction[0]
             ray_direction_y = self.camera_direction[1] + lam * self.plane_direction[1]
             ray_direction = [ray_direction_x, ray_direction_y]
-            '''may need to normalize'''
 
             # raycast to get intersection
-            intersection, intersection_distance, intersection_x = self.DDA(ray_direction)
+            intersection, intersection_distance, intersection_face, intersection_value = self.DDA(ray_direction)
 
             if intersection:
 
                 # colour
-                if intersection_x:
-
-                    colour = (255, 0, 0)
+                if intersection_value == 1:
+                    if intersection_face:
+                        colour = (0, 0, 255)
+                    else:
+                        colour = (0, 0, 150)
+                elif intersection_value == 2:
+                    if intersection_face:
+                        colour = (0, 255, 0)
+                    else:
+                        colour = (0, 150, 0)
+                elif intersection_value == 3:
+                    if intersection_face:
+                        colour = (255, 0, 0)
+                    else:
+                        colour = (150, 0, 0)
                 
-                else:
-                    
-                    colour = (0, 0, 255)
-
                 # height of column inverse to distance
-                column_height = 100 / intersection_distance
+                column_height = 0.5 / intersection_distance
 
                 # compute column limits on screen
-                column_top = int((self.canvas_height / 2) - (column_height / 2))
-                column_bottom = int((self.canvas_height / 2) + (column_height / 2))
+                column_top = int(self.canvas_height * (1 - column_height) / 2)
+                column_bottom = int(self.canvas_height * (1 + column_height) / 2)
 
                 # cutoff to top and bottom of screen
                 column_top = max(0, column_top)
@@ -169,65 +168,69 @@ class Game:
         # update canvas
         pygame.display.flip()
 
-
-
     def DDA(self, ray_direction):
 
-        '''can simplify if normalized'''
-        # compute scaling
-        s_x = math.sqrt(1 + (ray_direction[1] / ray_direction[0])**2)
-        s_y = math.sqrt(1 + (ray_direction[0] / ray_direction[1])**2)
+        # compute ray distance scaling for each axis 
+        s_x = 1 / abs(ray_direction[0])
+        s_y = 1 / abs(ray_direction[1])
 
         # intial grid position
         grid_x = math.floor(self.camera_position[0])
         grid_y = math.floor(self.camera_position[1])
 
-        # initial distances
+        # initial distances to boundary of current grid square
         if ray_direction[0] < 0:
             step_x = -1
-            ray_length_x = (self.camera_position[0] - math.floor(self.camera_position[0])) * s_x
+            ray_length_x = (self.camera_position[0] - grid_x) * s_x
         else:
             step_x = 1
-            ray_length_x = (math.ceil(self.camera_position[0]) - self.camera_position[0]) * s_x
+            ray_length_x = (grid_x + 1 - self.camera_position[0]) * s_x
         
         if ray_direction[1] < 0:
             step_y = -1
-            ray_length_y = (self.camera_position[1] - math.floor(self.camera_position[1])) * s_y
+            ray_length_y = (self.camera_position[1] - grid_y) * s_y
         else:
             step_y = 1
-            ray_length_y = (math.ceil(self.camera_position[1]) - self.camera_position[1]) * s_y
+            ray_length_y = (grid_y + 1 - self.camera_position[1]) * s_y
 
         # cast ray until intersection
         intersection = False
+        intersection_face = None
+        intersection_value = None
         max_distance = 1000.0
         current_distance = 0.0
-        intersection_x = None
 
         while ((not intersection) and (current_distance < max_distance)):
 
             # choose smaller ray length axis
             if ray_length_x < ray_length_y:
 
-                # step in this axis to new grid sqaure
+                # step in x axis to new grid sqaure
                 grid_x += step_x
 
                 # store current distance to new grid square
                 current_distance = ray_length_x
-                intersection_x = True
+
+                # current intersection with x-axis face
+                intersection_face = True
 
                 # update ray length due to new step
                 ray_length_x += s_x
 
             else:
-
+                
                 grid_y += step_y
                 current_distance = ray_length_y
-                intersection_x = False
+                intersection_face = False
                 ray_length_y += s_y
 
             # check if intersection with new grid square
             if (grid_x >= 0) and (grid_x < self.n) and (grid_y >= 0) and (grid_y < self.n):
-                if self.grid[grid_y][grid_x] == 1:
+
+                intersection_value = self.grid[grid_y][grid_x]
+                
+                # check if empty
+                if intersection_value != 0:
                     intersection = True
             else:
                 break
@@ -237,7 +240,7 @@ class Game:
             current_distance = 0.1
 
         # return status and distance
-        return intersection, current_distance, intersection_x
+        return intersection, current_distance, intersection_face, intersection_value
 
 
     def run(self):
@@ -246,7 +249,7 @@ class Game:
         while self.running:
 
             # clock
-            self.dt = self.clock.tick(60)
+            self.dt = self.clock.tick()
 
             # take input
             self.input()
@@ -256,7 +259,6 @@ class Game:
 
         # quit
         pygame.quit()
-
 
 
 @profile
