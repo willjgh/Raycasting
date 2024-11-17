@@ -4,6 +4,7 @@ import math
 import numpy as np
 import pygame.gfxdraw
 from profilehooks import profile
+from copy import copy
 
 rng = np.random.default_rng(255)
 
@@ -66,6 +67,27 @@ class Game:
         fps_t = self.font.render(fps , 1, (0, 255, 0))
         # display on canvas
         self.window.blit(fps_t,(0, 0))
+
+    def test_movement(self, x_movement, y_movement):
+        '''Test if movement collides with grid, move if no issues'''
+
+        # new position
+        new_position_x = self.camera_position[0] + x_movement
+        new_position_y = self.camera_position[1] + y_movement
+
+        # new grid square
+        new_grid_x = math.floor(new_position_x)
+        new_grid_y = math.floor(new_position_y)
+
+        # check if in grid
+        if (new_grid_x >= 0) and (new_grid_x < self.n) and (new_grid_y >= 0) and (new_grid_y < self.n):
+
+            # check if empty
+            if self.grid[new_grid_y][new_grid_x] == 0:
+
+                # update position
+                self.camera_position = [new_position_x, new_position_y]
+
     
     def input(self):
         '''Take inputs'''
@@ -83,23 +105,15 @@ class Game:
         step = 0.005 * self.dt
         turn = 0.005 * self.dt
         
-        # update camera position and angle
+        # update camera position (if no collision) and camera angle
         if keys[pygame.K_w]:
-            # self.camera_position[1] += step
-            self.camera_position[0] += self.camera_direction[0] * step
-            self.camera_position[1] += self.camera_direction[1] * step
+            self.test_movement(self.camera_direction[0] * step, self.camera_direction[1] * step)
         if keys[pygame.K_s]:
-            # self.camera_position[1] -= step
-            self.camera_position[0] -= self.camera_direction[0] * step
-            self.camera_position[1] -= self.camera_direction[1] * step
+            self.test_movement(-self.camera_direction[0] * step, -self.camera_direction[1] * step)
         if keys[pygame.K_a]:
-            # self.camera_position[0] += step
-            self.camera_position[0] -= self.plane_direction[0] * step
-            self.camera_position[1] -= self.plane_direction[1] * step
+            self.test_movement(-self.plane_direction[0] * step, -self.plane_direction[1] * step)
         if keys[pygame.K_d]:
-            # self.camera_position[0] -= step
-            self.camera_position[0] += self.plane_direction[0] * step
-            self.camera_position[1] += self.plane_direction[1] * step
+            self.test_movement(self.plane_direction[0] * step, self.plane_direction[1] * step)
         if keys[pygame.K_LEFT]:
             self.camera_angle += turn
         if keys[pygame.K_RIGHT]:
